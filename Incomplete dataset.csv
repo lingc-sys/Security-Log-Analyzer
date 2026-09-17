@@ -1,4 +1,4 @@
-Switch ID,ys,Received Packets,jj,ff,Sent Packets,Port alive Duration (S),Delta Received Packets,Delta Received Bytes,Delta Sent Bytes,Delta Sent Packets,Delta Port alive Duration (S),Connection Point,Total Load/Rate,Total Load/Latest,Unknown Load/Rate,Unknown Load/Latest,Latest bytes counter,Active Flow Entries,Packets Looked Up,Packets Matched,nb
+Switch ID,ys,Received Packets,jj,ff,Sent Packets,Port alive Duration (S),Delta Received Packets,Delta Received Bytes,Delta Sent Bytes,Delta Sent Packets,Delta Port alive Duration (S),Connection Point,Total Load/Rate,Total Load/Latest,Unknown Load/Rate,Unknown Load/Latest,Latest bytes counter,Active Flow Entries,Packets Looked Up,Packets Matched,gj
 of:0000000000000004,Port#:1,240,16586,12622603,467,126,0,0,280,2,5,1,0,0,0,0,0,4,819,757,TCP-SYN
 of:0000000000000004,Port#:2,158,20530,35464,376,171,4,556,3407,43,5,2,0,0,0,0,0,5,1018,918,TCP-SYN
 of:0000000000000008,Port#:3,1930,37881404,67857371,414333,1297,0,0,556,4,5,2,0,0,0,0,0,8,987400,987276,Normal

@@ -1,208 +1,156 @@
 import streamlit as st
-import pandas as pd
-import plotly.express as px
 
-# 1. 页面设置
-st.set_page_config(page_title="网络安全日志分析平台", layout="wide")
-st.title("🛡️ 网络安全日志分析与可视化平台")
-st.markdown("上传你的网络日志，快速洞察攻击趋势。")
+st.set_page_config(page_title="SecureViz 首页", layout="wide")
 
-# 2. 侧边栏：文件上传（支持 CSV 和 JSON）
-st.sidebar.header("数据管理")
-uploaded_file = st.sidebar.file_uploader("请上传日志文件 (CSV 或 JSON)", type=["csv", "json"])
+#1. 注入 CSS（背景图 + 卡片样式
+st.markdown("""
+<style>
+/* 把 1rem 改成 2.5rem，让顶部多出约 40px 的呼吸空间 */
+    .block-container {
+        padding-top: 2.5rem !important; 
+        margin-top: 0 !important;
+    }
 
-# 3. 核心逻辑：如果用户上传了文件，就读取并展示
-if uploaded_file is not None:
-    # 根据文件后缀名判断读取方式
-    if uploaded_file.name.endswith('.csv'):
-        df = pd.read_csv(uploaded_file)
-    elif uploaded_file.name.endswith('.json'):
-        df = pd.read_json(uploaded_file, lines=True)
-    else:
-        st.error("暂不支持该文件格式，请上传 CSV 或 JSON。")
-        st.stop()
-
-    # --- 智能列名识别与用户强制兜底 ---
-    def get_standard_columns(dataframe):
-        # 预设的别名表（加入了流量字节相关的列）
-        mapping = {
-            'Label': ['Label', 'label', 'Class', 'class', 'Attack Type', 'attack_type', 'target', 'Attack', '攻击类型', '类别'],
-            'Port Number': ['Port Number', 'port', 'Port', 'dst_port', 'Destination Port', 'destination_port', 'port_no', '端口', '端口号'],
-            'Received Bytes': ['Received Bytes', 'received_bytes', 'recv_bytes', 'bytes_in', 'in_bytes', '接收字节', '接收字节数'],
-            'Sent Bytes': ['Sent Bytes', 'sent_bytes', 'send_bytes', 'bytes_out', 'out_bytes', '发送字节', '发送字节数']
-        }
-        identified = {}
-        for standard_name, aliases in mapping.items():
-            for alias in aliases:
-                if alias in dataframe.columns:
-                    identified[standard_name] = alias
-                    break
-        missing = [std for std in mapping.keys() if std not in identified]
-        return identified, missing
-
-    identified_cols, missing_cols = get_standard_columns(df)
-
-    with st.sidebar.expander("⚙️ 列名映射设置", expanded=bool(missing_cols)):
-        # 攻击类型列
-        if 'Label' in identified_cols:
-            st.write(f"✅ 已自动识别攻击类型列：`{identified_cols['Label']}`")
-        else:
-            st.warning("未能自动识别【攻击类型】列，请手动选择：")
-            user_label = st.selectbox("选择攻击类型列：", options=df.columns.tolist(), key="user_label")
-            identified_cols['Label'] = user_label
-
-        # 端口列
-        if 'Port Number' in identified_cols:
-            st.write(f"✅ 已自动识别端口列：`{identified_cols['Port Number']}`")
-        else:
-            st.warning("未能自动识别【端口号】列，请手动选择：")
-            user_port = st.selectbox("选择端口列：", options=df.columns.tolist(), key="user_port")
-            identified_cols['Port Number'] = user_port
-
-        # 流量字节列兜底
-        if 'Received Bytes' in identified_cols:
-            st.write(f"✅ 已自动识别接收字节列：`{identified_cols['Received Bytes']}`")
-        else:
-            st.warning("未能自动识别【接收字节】列，请手动选择：")
-            user_recv = st.selectbox("选择接收字节列：", options=df.columns.tolist(), key="user_recv")
-            identified_cols['Received Bytes'] = user_recv
-
-        if 'Sent Bytes' in identified_cols:
-            st.write(f"✅ 已自动识别发送字节列：`{identified_cols['Sent Bytes']}`")
-        else:
-            st.warning("未能自动识别【发送字节】列，请手动选择：")
-            user_sent = st.selectbox("选择发送字节列：", options=df.columns.tolist(), key="user_sent")
-            identified_cols['Sent Bytes'] = user_sent
-
-    # 根据最终确定的列名，对数据进行重命名（统一格式）
-    rename_dict = {}
-    for std_name, actual_name in identified_cols.items():
-        if std_name != actual_name:
-            rename_dict[actual_name] = std_name
-            
-    if rename_dict:
-        df = df.rename(columns=rename_dict)
-        st.sidebar.success(f"✅ 已完成列名映射。")
+    /* 给大标题也加一点点上边距 */
+    .main-title {
+        margin-top: 10px !important; 
+        margin-bottom: 20px !important;
+        line-height: 1.4 !important; /* 加上行高，防止字体上下被裁切 */
+    }
+    /* 背景图层：固定不动，全屏覆盖，不压缩变形 */
+    .bg-layer {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        /* 浅色清爽的数据科技背景图 */
+        background-image: url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop');
+        background-size: cover;       /*等比例缩放，填满屏幕，绝对不拉伸 */
+        background-position: center;
+        background-repeat: no-repeat;
+        z-index: -9999;               /* 压在页面最底层 */
+        opacity: 0.35;                /* 降低透明度，让背景很清爽，不干扰文字 */
+    }
     
-    # --- 侧边栏筛选器 ---
-    if 'Label' in df.columns:
-        unique_labels = df['Label'].unique().tolist()
-        selected_labels = st.sidebar.multiselect(
-            "请选择要分析的攻击类型：",
-            options=unique_labels,
-            default=unique_labels
-        )
-        if not selected_labels:
-            st.warning("请在左侧至少选择一种攻击类型以显示图表。")
-            df_filtered = df.iloc[0:0]
-        else:
-            df_filtered = df[df['Label'].isin(selected_labels)]
-    else:
-        st.warning("数据集中没有找到 'Label' 列，无法进行筛选和统计。")
-        df_filtered = df
-    
-    # --- 数据预览 ---
-    st.subheader("📋 数据预览")
-    st.dataframe(df.head())
+    /* 大标题样式 */
+    .main-title {
+        text-align: center;
+        font-size: 42px;
+        font-weight: 800;
+        color: #1e293b;
+        margin-top: 60px;
+        margin-bottom: 10px;
+        letter-spacing: 2px;
+    }
+    .sub-title {
+        text-align: center;
+        font-size: 16px;
+        color: #64748b;
+        margin-bottom: 50px;
+    }
 
-    # --- 彩色全局统计面板 ---
-    st.subheader("📊 全局数据概览")
-    total_records = len(df)
-    total_types = df['Label'].nunique() if 'Label' in df.columns else 0
-    if 'Label' in df.columns:
-        attack_count = len(df[df['Label'] != 'Normal'])
-        attack_ratio = (attack_count / len(df)) * 100
-    else:
-        attack_ratio = 0
+    /* 卡片样式 */
+        .card {
+        background-color: rgba(255, 255, 255, 0.95);
+        border-radius: 12px;
+        padding: 24px;
+        min-height: 200px; /* 改成最小高度 */
+        height: auto;      /* 高度自适应 */
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        transition: transform 0.3s, box-shadow 0.3s;
+        border: 1px solid #f1f5f9;
+        word-wrap: break-word; /* 加上防溢出断行 */
+    }
+    .card:hover {
+        transform: translateY(-5px); /* 悬浮上浮效果 */
+        box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+    }
+    .card-number {
+        font-size: 32px;
+        font-weight: 900;
+        color: #3b82f6; /* 亮蓝色 */
+        margin-bottom: 10px;
+    }
+    .card-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #1e293b;
+        margin-bottom: 10px;
+    }
+    .card-desc {
+        font-size: 13px;
+        color: #64748b;
+        line-height: 1.5;
+    }
+</style>
+<div class="bg-layer"></div>
+""", unsafe_allow_html=True)
 
-    html_code = f"""
-    <div style="display: flex; justify-content: space-between; gap: 20px;">
-        <div style="flex: 1; background-color: #e8f5e9; border-left: 6px solid #4caf50; padding: 20px; border-radius: 8px; box-shadow: 2px 2px 10px rgba(0,0,0,0.1);">
-            <p style="margin: 0; color: #2e7d32; font-size: 16px; font-weight: bold;">📋 总日志条数</p>
-            <h2 style="margin: 10px 0 0 0; color: #1b5e20; font-size: 32px;">{total_records:,} 条</h2>
-        </div>
-        <div style="flex: 1; background-color: #e3f2fd; border-left: 6px solid #2196f3; padding: 20px; border-radius: 8px; box-shadow: 2px 2px 10px rgba(0,0,0,0.1);">
-            <p style="margin: 0; color: #1565c0; font-size: 16px; font-weight: bold;">🦠 攻击类型总数</p>
-            <h2 style="margin: 10px 0 0 0; color: #0d47a1; font-size: 32px;">{total_types} 种</h2>
-        </div>
-        <div style="flex: 1; background-color: #fff3e0; border-left: 6px solid #ff9800; padding: 20px; border-radius: 8px; box-shadow: 2px 2px 10px rgba(0,0,0,0.1);">
-            <p style="margin: 0; color: #ef6c00; font-size: 16px; font-weight: bold;">⚠️ 异常流量占比</p>
-            <h2 style="margin: 10px 0 0 0; color: #e65100; font-size: 32px;">{attack_ratio:.2f}%</h2>
-        </div>
+# 2.渲染标题
+st.markdown("<div class='main-title'>见远，让数据用起来</div>", unsafe_allow_html=True)
+#展示区
+# 4. 案例体验展示区
+st.markdown("<br><br>", unsafe_allow_html=True) # 加一点间距
+st.markdown("<h3 style='color: #1e293b;'>示范案例</h3>", unsafe_allow_html=True)
+st.markdown("---")
+
+# 分成四列
+col_case1, col_case2, col_case3, col_case4 = st.columns(4, gap="medium")
+
+#案例1
+with col_case1:
+
+    st.image("Picture/攻击次数.png", use_container_width=True)
+    st.markdown("**攻击次数**")
+    st.markdown("<div style='color: #64748b; font-size: 13px;'>直观展示 PortScan、TCP-SYN 等攻击的频次。</div>", unsafe_allow_html=True)
+
+#案例2
+with col_case2:
+    st.image("Picture/攻击次数.png", use_container_width=True)
+    st.markdown("**攻击类型占比 TOP 10**")
+    st.markdown("<div style='color: #64748b; font-size: 13px;'>直观展示 PortScan、TCP-SYN 等攻击的占比。</div>", unsafe_allow_html=True)
+
+#案例3
+with col_case3:
+    st.image("Picture/攻击次数.png", use_container_width=True)
+    st.markdown("**流量大小对比**")
+    st.markdown("<div style='color: #64748b; font-size: 13px;'>快速定位被攻击次数最多的前 10 个高风险端口。</div>", unsafe_allow_html=True)
+
+# 案例4
+with col_case4:
+    st.image("Picture/攻击次数.png", use_container_width=True)
+    st.markdown("**流量大小对比分析**")
+    st.markdown("<div style='color: #64748b; font-size: 13px;'>双折线图对比接收与发送字节数的波动趋势。</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>SecureViz 网络安全日志分析与可视化平台</div>", unsafe_allow_html=True)
+
+# 3. 渲染四张卡片
+col1, col2, col3, col4 = st.columns(4, gap="large")
+
+# 卡片 HTML 模板
+def render_card(num, title, desc):
+    return f"""
+    <div class='card'>
+        <div class='card-number'>{num}</div>
+        <div class='card-title'>{title}</div>
+        <div class='card-desc'>{desc}</div>
     </div>
     """
-    st.html(html_code)
 
-    # --- 攻击类型分布与统计 ---
-    if 'Label' in df.columns:
-        st.subheader("📊 攻击类型分布")
-        attack_counts = df_filtered['Label'].value_counts().reset_index()
-        attack_counts.columns = ['攻击类型', '次数']
-        
-        if not attack_counts.empty:
-            # 环形图
-            fig = px.pie(attack_counts, names='攻击类型', values='次数', title='日志攻击类型占比', hole=0.3)
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # 柱状图
-            st.subheader("📈 攻击次数统计")
-            fig_bar = px.bar(attack_counts, x='攻击类型', y='次数', title='各类攻击发生次数', color='攻击类型')
-            st.plotly_chart(fig_bar, use_container_width=True)
-            
-            # --- 端口 TOP 10 排行 ---
-            if 'Port Number' in df.columns:
-                st.subheader("🔌 攻击源端口 TOP 10")
-                port_counts = df['Port Number'].value_counts().head(10).reset_index()
-                port_counts.columns = ['端口号', '攻击次数']
-                fig_port = px.bar(port_counts, x='攻击次数', y='端口号', orientation='h', 
-                                  title='被攻击次数最多的前10个端口', color='攻击次数', color_continuous_scale='Reds')
-                st.plotly_chart(fig_port, use_container_width=True)
-            
-            # --- 流量大小对比分析折线图 ---
-            if 'Received Bytes' in df.columns and 'Sent Bytes' in df.columns:
-                st.subheader("📉 流量大小对比分析")
-                # 取前 100 条记录，并重置索引
-                df_line = df.head(100).reset_index()
-                
-                # 构造 melt 的 id_vars，只保留存在的列
-                id_vars_list = ['index']
-                if 'Label' in df_line.columns:
-                    id_vars_list.append('Label')
-                
-                df_melted = df_line.melt(
-                    id_vars=id_vars_list,
-                    value_vars=['Received Bytes', 'Sent Bytes'],
-                    var_name='流量方向',
-                    value_name='字节数'
-                )
-                
-                fig_line = px.line(
-                    df_melted, x='index', y='字节数', color='流量方向', line_dash='流量方向',
-                    title='前100条日志的流量字节数变化',
-                    labels={'index': '日志序号', '字节数': '流量大小 (Bytes)'}
-                )
-                st.plotly_chart(fig_line, use_container_width=True)
-        else:
-            st.info("当前选择没有符合的数据，请调整筛选条件。")
-    else:
-        st.warning("数据集中没有找到 'Label' 列,请检查你的CSV文件列名是否为 Label。")
+with col1:
+    st.markdown(render_card("01", "数据接入", "支持 CSV / JSON 格式的网络日志文件上传，快速完成数据加载与预览。"), unsafe_allow_html=True)
+    if st.button("去接入", key="btn1", use_container_width=True):
+        st.switch_page("pages/1_数据分析.py")
 
-else:
-    # 欢迎界面
-    st.markdown("""
-    ### 👋 欢迎使用网络安全日志分析平台
-    
-    本系统可以帮助你快速分析网络安全日志，洞察攻击趋势。请从左侧上传日志文件开始。
-    
-    **你可以上传的格式：**
-    - CSV 格式的网络日志
-    - JSON 格式的网络日志
-    
-    **上传后你能获得：**
-    - 📊 全局数据概览（总条数、攻击类型数、异常占比）
-    - 🥧 攻击类型分布环形图
-    - 📈 攻击次数统计柱状图
-    - 🔌 端口 TOP 10 排行
-    - 📉 流量大小对比分析折线图
-    """)
-    st.info("👈 请从左侧侧边栏点击 'Browse files' 上传你的日志文件。")
+with col2:
+    st.markdown(render_card("02", "数据处理", "基于别名映射的智能列名识别，自动清洗并统一数据格式。"), unsafe_allow_html=True)
+    if st.button("去处理", key="btn2", use_container_width=True):
+        st.switch_page("pages/1_数据分析.py")
+
+with col3:
+    st.markdown(render_card("03", "数据分析", "生成攻击类型分布、端口排行与流量趋势等多维交互图表。"), unsafe_allow_html=True)
+    if st.button("去分析", key="btn3", use_container_width=True):
+        st.switch_page("pages/1_数据分析.py")
+
+with col4:
+    st.markdown(render_card("04", "数据应用", "云端部署与多终端访问，随时随地洞察网络安全态势。"), unsafe_allow_html=True)
+    if st.button("去应用", key="btn4", use_container_width=True):
+        st.switch_page("pages/1_数据分析.py")
