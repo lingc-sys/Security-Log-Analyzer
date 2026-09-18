@@ -105,19 +105,19 @@ with col_case1:
 
 #案例2
 with col_case2:
-    st.image("Picture/攻击次数.png", use_container_width=True)
+    st.image("Picture/攻击类型.png", use_container_width=True)
     st.markdown("**攻击类型占比 TOP 10**")
     st.markdown("<div style='color: #64748b; font-size: 13px;'>直观展示 PortScan、TCP-SYN 等攻击的占比。</div>", unsafe_allow_html=True)
 
 #案例3
 with col_case3:
-    st.image("Picture/攻击次数.png", use_container_width=True)
+    st.image("Picture/攻击源端口.png", use_container_width=True)
     st.markdown("**流量大小对比**")
     st.markdown("<div style='color: #64748b; font-size: 13px;'>快速定位被攻击次数最多的前 10 个高风险端口。</div>", unsafe_allow_html=True)
 
 # 案例4
 with col_case4:
-    st.image("Picture/攻击次数.png", use_container_width=True)
+    st.image("Picture/流量大小对比分析.png", use_container_width=True)
     st.markdown("**流量大小对比分析**")
     st.markdown("<div style='color: #64748b; font-size: 13px;'>双折线图对比接收与发送字节数的波动趋势。</div>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>SecureViz 网络安全日志分析与可视化平台</div>", unsafe_allow_html=True)
