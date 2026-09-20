@@ -1,9 +1,6 @@
 streamlit
 pandas
 plotly
-<<<<<<< HEAD
 openpyxl
 scikit-learn
-=======
-scikit-learn
->>>>>>> 85cbb7ba6a772a6f00a81faf52393103959f9f68
+
