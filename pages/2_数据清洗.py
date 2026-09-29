@@ -21,6 +21,10 @@ if 'clean_mapping_confirmed' not in st.session_state:
     st.session_state['clean_mapping_confirmed'] = False
 if 'clean_df_before' not in st.session_state:
     st.session_state['clean_df_before'] = None
+if 'clean_duplicate_indices' not in st.session_state:
+    st.session_state['clean_duplicate_indices'] = []
+if 'clean_missing_indices' not in st.session_state:
+    st.session_state['clean_missing_indices'] = []
 
 #2. 侧边栏：文件上传
 st.sidebar.header("数据管理")
@@ -124,16 +128,20 @@ if df is not None:
     #4. 清洗函数
     def remove_duplicates(dataframe):
         before = len(dataframe)
+        duplicated_mask = dataframe.duplicated()
+        removed_indices = dataframe[duplicated_mask].index.tolist()
         dataframe = dataframe.drop_duplicates()
         removed = before - len(dataframe)
-        return dataframe, f"去重：删除了 {removed} 行重复数据（剩余 {len(dataframe)} 行）"
+        return dataframe, f"去重：删除了 {removed} 行重复数据（剩余 {len(dataframe)} 行）", removed_indices
 
     def handle_missing(dataframe):
         missing_count = int(dataframe.isnull().sum().sum())
         if missing_count == 0:
-            return dataframe, "缺失值处理：未发现空值，无需处理"
+            return dataframe, "缺失值处理：未发现空值，无需处理", []
+        missing_mask = dataframe.isnull().any(axis=1)
+        removed_indices = dataframe[missing_mask].index.tolist()
         dataframe = dataframe.dropna()
-        return dataframe, f"缺失值处理：发现 {missing_count} 个空值，已删除含空值的行（剩余 {len(dataframe)} 行）"
+        return dataframe, f"缺失值处理：发现 {missing_count} 个空值，已删除含空值的行（剩余 {len(dataframe)} 行）", removed_indices
 
     def normalize_labels(dataframe):
         if 'Label' not in dataframe.columns:
@@ -178,19 +186,28 @@ if df is not None:
             return dataframe, f"类型转换：已将 {', '.join(converted)} 转换为数值型"
         return dataframe, "类型转换：无需转换的列"
 
-    #自动清洗
+# 自动清洗
     if not st.session_state['clean_triggered']:
         st.session_state['clean_df_before'] = df.copy()
 
         report = []
-        df, msg = remove_duplicates(df)
+        duplicate_indices = []
+        missing_indices = []
+
+        df, msg, idx = remove_duplicates(df)
         report.append(msg)
-        df, msg = handle_missing(df)
+        duplicate_indices = idx
+
+        df, msg, idx = handle_missing(df)
         report.append(msg)
+        missing_indices = idx
+
         df, msg = normalize_labels(df)
         report.append(msg)
+
         df, msg = validate_port_range(df)
         report.append(msg)
+
         df, msg = convert_types(df)
         report.append(msg)
 
@@ -198,6 +215,8 @@ if df is not None:
         st.session_state['clean_report'] = report
         st.session_state['clean_final_count'] = len(df)
         st.session_state['clean_triggered'] = True
+        st.session_state['clean_duplicate_indices'] = duplicate_indices
+        st.session_state['clean_missing_indices'] = missing_indices
 
     #6. 页面渲染
     df = st.session_state['clean_df']
@@ -253,21 +272,29 @@ if df is not None:
     st.markdown("**数据预览**")
     st.dataframe(df.head(20), use_container_width=True)
 
-    # 7. 数据错误行展示
+        # 7. 数据错误行展示
     st.markdown("**数据错误行展示（最多 20 行）**")
 
     error_rows_list = []
     df_before = st.session_state.get('clean_df_before')
+    duplicate_indices = st.session_state.get('clean_duplicate_indices', [])
+    missing_indices = st.session_state.get('clean_missing_indices', [])
 
-    # 1. 被删除的行
-    if df_before is not None:
-        removed_indices = set(df_before.index) - set(df.index)
-        if removed_indices:
-            removed_rows = df_before[df_before.index.isin(removed_indices)].copy()
-            removed_rows.insert(0, '错误类型', '重复或含缺失值')
-            error_rows_list.append(removed_rows)
+    # 1. 重复行
+    if df_before is not None and duplicate_indices:
+        duplicate_rows = df_before.loc[df_before.index.isin(duplicate_indices)].copy()
+        if not duplicate_rows.empty:
+            duplicate_rows.insert(0, '错误类型', '重复行')
+            error_rows_list.append(duplicate_rows)
 
-    # 2. 端口非法的行
+    # 2. 含缺失值的行
+    if df_before is not None and missing_indices:
+        missing_rows = df_before.loc[df_before.index.isin(missing_indices)].copy()
+        if not missing_rows.empty:
+            missing_rows.insert(0, '错误类型', '含缺失值')
+            error_rows_list.append(missing_rows)
+
+    # 3. 端口非法的行
     if 'Port Number' in df.columns:
         invalid_port_rows = df[df['Port Number'].isnull()].copy()
         if not invalid_port_rows.empty:
@@ -282,14 +309,61 @@ if df is not None:
 
 else:
     st.title("数据清洗")
-    st.markdown("""
-    本模块上传的网络安全日志将进行简单清洗：
-    - 去除重复行
-    - 处理缺失值
-    - 攻击标签标准化
-    - 端口范围校验
-    - 数据类型转换
     
-    请从左侧上传日志文件开始。
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    st.html("""
+    <div style="background-color: #f0f5ff; border: 2px dashed #b3cfff; border-radius: 12px; padding: 30px 20px; margin-top: 10px;">
+        
+        <h4 style="text-align: center; color: #1e3a8a; margin-bottom: 30px; font-size: 20px;">
+            日志数据清洗流程
+        </h4>
+        
+        <div style="display: flex; justify-content: space-between; gap: 20px;">
+            
+            <!-- 卡片 1 -->
+            <div style="flex: 1; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                <div style="background-color: #5b9bd5; color: white; text-align: center; padding: 12px 0; font-weight: bold; font-size: 15px;">
+                    去重与缺失值
+                </div>
+                <div style="background-color: white; padding: 22px 15px; text-align: center; color: #475569; font-size: 14px; line-height: 1.9;">
+                    删除完全重复记录<br>清理含空值的行
+                </div>
+            </div>
+
+            <!-- 卡片 2 -->
+            <div style="flex: 1; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                <div style="background-color: #5b9bd5; color: white; text-align: center; padding: 12px 0; font-weight: bold; font-size: 15px;">
+                    标签标准化
+                </div>
+                <div style="background-color: white; padding: 22px 15px; text-align: center; color: #475569; font-size: 14px; line-height: 1.9;">
+                    统一攻击类型大小写<br>别名映射规整
+                </div>
+            </div>
+
+            <!-- 卡片 3 -->
+            <div style="flex: 1; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                <div style="background-color: #5b9bd5; color: white; text-align: center; padding: 12px 0; font-weight: bold; font-size: 15px;">
+                    端口校验
+                </div>
+                <div style="background-color: white; padding: 22px 15px; text-align: center; color: #475569; font-size: 14px; line-height: 1.9;">
+                    校验端口范围是否合规<br>错误进行标记
+                </div>
+            </div>
+
+            <!-- 卡片 4 -->
+            <div style="flex: 1; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                <div style="background-color: #5b9bd5; color: white; text-align: center; padding: 12px 0; font-weight: bold; font-size: 15px;">
+                    类型转换与导出
+                </div>
+                <div style="background-color: white; padding: 22px 15px; text-align: center; color: #475569; font-size: 14px; line-height: 1.9;">
+                    数值列类型转换<br>支持 CSV / JSON 下载
+                </div>
+            </div>
+
+        </div>
+    </div>
     """)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
     st.info("请从左侧侧边栏上传日志文件，系统将自动执行清洗流程。")
